@@ -20,7 +20,8 @@
 *
 * @subpackage  git-php
 * @description PHP front end to git repositories written by Zack Bartel
-* @copyright   Copyright (c) 2006 Zack Bartel
+*              (including amendments cherry picked from forked version by Peeter Vois)
+* @copyright   Copyright (c) 2006 Zack Bartel and Peeter Vois
 * 
 * +------------------------------------------------------------------------+
 * | This program is free software; you can redistribute it and/or          |
@@ -91,7 +92,7 @@ function efCustomActionHandler( $action, $article ) {
 global $wgOut;
 if( $action == 'code' ) {
 	$wgOut->setPageTitle( $article->getTitle()->getText() );
-	$wgOut->addWikiText( "You are performing a custom action on '''" . $article->getTitle()->getText() . "'''." );
+	#$wgOut->addWikiText( "You are performing a custom action on '''" . $article->getTitle()->getText() . "'''." );
 	$wgOut->addHTML( git_render_page() );
 }
 
@@ -180,15 +181,13 @@ function git_render_page() {
 	if (isset($_GET['p']))  { 
 			$str .= html_spacer();
 			$str .= html_desc($_GET['p']);
-			$str .= html_title("Summary");
+			$str .= html_spacer();
 			$str .= html_summary($_GET['p']);
 			$str .= html_spacer();
 			if ($_GET['a'] == "commitdiff")
 					$str .= html_diff($_GET['p'], $_GET['h'], $_GET['hb']);
-			else    {
-					$str .= html_title("Files");
+			else
 					$str .= html_browse($_GET['p']);
-			}
 	}
 	else {
 			$str .= html_spacer();
@@ -203,25 +202,39 @@ function git_render_page() {
 function html_summary($proj)    {
 		$str = '';
 
+		$str .= '<div class="gitsummary">';
+		$str .= html_title("Summary");
 		$repo = get_repo_path($proj);
-		if (!isset($_GET['t']) && !isset($_GET['b']))
-				$str .= html_shortlog($repo, 6);
+		if (!isset($_GET['t']) && !isset($_GET['b']) && !isset($_GET['h']))
+			$str .= html_shortlog($repo, 6);
+		else if (isset($_GET['t']))
+			$str .= html_logmsg($repo, $_GET['t']);
+		else if (isset($_GET['h']))
+			$str .= html_logmsg($repo, $_GET['h']);
+		else
+			$str .= html_logmsg($repo, $_GET['b']);
+		$str .= '</div>';
 
 		return $str;
 }
 
-function html_browse($proj)   {
+function html_browse($proj) {
 		$str = '';
-
-		if (isset($_GET['b']))
+ 
+		$str .= '<div class="gitbrowse">';
+		if (isset($_GET['b'])) {
+				$str .= html_title("Files [".$_GET['b']."]");
 				$str .= html_blob($proj, $_GET['b']);
-		else    {
+		}
+		else {
 				if (isset($_GET['t']))
 						$tree = $_GET['t'];
 				else 
 						$tree = "HEAD";
-				 $str .= html_tree($proj, $tree); 
+				$str .= html_title("Files [$tree]");
+				$str .= html_tree($proj, $tree); 
 		}
+		$str .= '</div>';
 
 		return $str;
 }
@@ -246,6 +259,7 @@ function html_blob($proj, $blob)    {
 
 function html_diff($proj, $commit, $parent)    {
 		$str = '';
+		$str .= '<div class="gitbrowse">';
 
 		$repo = get_repo_path($proj);
 		$out = array();
@@ -254,6 +268,7 @@ function html_diff($proj, $commit, $parent)    {
 		$str .= highlight_code(implode("\n",$out));
 		$str .= "</div>\n";
 
+		$str .= "</div>\n";
 		return $str;
 }
 
@@ -262,7 +277,7 @@ function html_tree($proj, $tree)   {
 
 		$t = git_ls_tree(get_repo_path($proj), $tree);
 
-		$str .= "<div class=\"gitbrowse\">\n";
+		$str .= "<div class=\"gittree\">\n";
 		$str .= "<table>\n";
 		foreach ($t as $obj)    {
 				$plain = "";
@@ -293,7 +308,8 @@ function html_shortlog($repo, $count)   {
 				$pid = $c['parent'];
 				$mess = short_desc($c['message'], 110);
 				$diff = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=commitdiff&h=$cid&hb=$pid\">commitdiff</a>";
-				$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$mess</td><td>$diff</td></tr>\n"; 
+				$tree = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&t=$cid\">tree</a>";
+				$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$mess</td><td>$diff</td><td>$tree</td></tr>\n"; 
 				$c = git_commit($repo, $c["parent"]);
 		}
 		$str .= "</table>\n";
@@ -301,9 +317,29 @@ function html_shortlog($repo, $count)   {
 		return $str;
 }
 
+function html_logmsg($repo, $cid)   {
+		$str = '';
+
+		$str .= "<table>\n";
+		$c = git_commit($repo, $cid);
+		$date = date("D n/j/y G:i", (int)$c['date']);
+		#$cid = $c['commit_id'];
+		$pid = $c['parent'];
+		$mess = $c['message'];
+		$diff = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=commitdiff&h=$cid&hb=$pid\">commitdiff</a>";
+		$tree = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&t=$cid\">tree</a>";
+		$parent = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&t=$pid\">parent</a>";
+		$diff_or_tree = ($_GET['a'] == "commitdiff") ? $tree : $diff;
+		$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$diff_or_tree</td><td>$parent</td></tr>\n"; 
+		$str .= "</table>\n";
+		$str .= "<pre>$mess</pre>\n";
+
+		return $str;
+}
+
 function html_desc($proj)    {
 		$str = '';
-		
+		$str .= '<div class="gitdesc">';	
 		$repo = get_repo_path($proj);
 		$desc = file_get_contents("$repo/description"); 
 		$owner = get_file_owner($repo);
@@ -315,6 +351,7 @@ function html_desc($proj)    {
 		$str .= "<tr><td>last change</td><td>$last</td></tr>\n";
 		$str .= "</table>\n";
 
+		$str .= "</div>\n";
 		return $str;
 }
 
@@ -481,8 +518,8 @@ function git_commit($repo, $cid)  {
 		$commit["date"] = "{$g[++$i]} {$g[++$i]}";
 		$commit["message"] = "";
 		$size = count($out);
-		for (; $i < $size-1; $i++)
-				$commit["message"] .= $out[$i];
+		for ($i = 5; $i < $size-1; $i++)
+				$commit["message"] .= $out[$i] . "\n";
 		return $commit;
 }
 
@@ -527,7 +564,7 @@ function sanitized_url()    {
 		}
 
 		/* the GET vars used by git-php */
-		$git_get = array('p', 'dl', 'b', 'a', 'h', 't');
+		$git_get = array('p', 'dl', 'b', 'a', 'h', 'hb', 't');
 
 		foreach ($_GET as $var => $val) {
 				if (!in_array($var, $git_get))   {
@@ -795,9 +832,6 @@ function html_style($git_css) {
 		$str .= <<< EOF
 				#gitbody    {
 						margin: 10px 10px 10px 10px;
-						border-style: solid;
-						border-width: 1px;
-						border-color: gray;
 						font-family: sans-serif;
 						font-size: 10px;
 				}
@@ -821,9 +855,14 @@ function html_style($git_css) {
 
 				tr:hover { background-color:#edece6; }
 
-				div.gitbrowse a.blob {
+				div.gittree a.blob {
 						text-decoration: none;
 						color: #000000;
+				}
+
+				div.gitsummary, div.gitbrowse, div.gitdesc {
+						padding: 10px;
+						border: 1px solid grey;
 				}
 
 				div.gitcode {
@@ -847,10 +886,10 @@ function html_style($git_css) {
 						font-weight: bold;
 				}
 
-				div.gitbrowse a.blob:hover {
+				div.gittree a.blob:hover {
 						text-decoration: underline;
 				}
-				a.gitbrowse:hover { text-decoration:underline; color:#880000; }
+				a.gittree:hover { text-decoration:underline; color:#880000; }
 				a.rss_logo {
 						float:left; padding:3px 0px; width:35px; line-height:10px;
 								margin: 2px 5px 5px 5px;
