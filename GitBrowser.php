@@ -115,6 +115,7 @@ function git_render_page() {
 	$repo_index = "index.aux";
 
 	$repo_directory = '/home/david/git/';
+	$geshi_directory = '/home/david/src/mediawiki/extensions/SyntaxHighlight_GeSHi/geshi';
 
 	//if git is not installed into standard path, we need to set the path
 	$mypath= getenv("PATH");
@@ -149,6 +150,10 @@ function git_render_page() {
 	}
 
 	sort($repos);
+
+	if ($geshi_directory != '') {
+		require "$geshi_directory/geshi.php";
+	}
 
 	if (!isset($git_embed) && $git_embed != true)
 			$git_embed = false;
@@ -205,14 +210,11 @@ function html_summary($proj)    {
 		$str .= '<div class="gitsummary">';
 		$str .= html_title("Summary");
 		$repo = get_repo_path($proj);
-		if (!isset($_GET['t']) && !isset($_GET['b']) && !isset($_GET['h']))
+		if (!isset($_GET['h']))
 			$str .= html_shortlog($repo, 6);
-		else if (isset($_GET['t']))
+		else if (isset($_GET['t'])) {
 			$str .= html_logmsg($repo, $_GET['t']);
-		else if (isset($_GET['h']))
-			$str .= html_logmsg($repo, $_GET['h']);
-		else
-			$str .= html_logmsg($repo, $_GET['b']);
+		}
 		$str .= '</div>';
 
 		return $str;
@@ -221,26 +223,30 @@ function html_summary($proj)    {
 function html_browse($proj) {
 		$str = '';
  
+		$f = $_GET['f'];
+
 		$str .= '<div class="gitbrowse">';
-		if (isset($_GET['b'])) {
-				$str .= html_title("Files [".$_GET['b']."]");
-				$str .= html_blob($proj, $_GET['b']);
+		if (isset($_GET['h'])) {
+				$str .= html_title("Files $f [".$_GET['h']."]");
+				$str .= html_blob($proj, $_GET['h'], $f);
 		}
 		else {
 				if (isset($_GET['t']))
 						$tree = $_GET['t'];
 				else 
 						$tree = "HEAD";
-				$str .= html_title("Files [$tree]");
-				$str .= html_tree($proj, $tree); 
+				$str .= html_title("Files $f [$tree]");
+				$str .= html_tree($proj, $tree, $f); 
 		}
 		$str .= '</div>';
 
 		return $str;
 }
 
-function html_blob($proj, $blob)    {
+function html_blob($proj, $blob, $filename)    {
 		$str = '';
+
+		$ext = pathinfo($filename, PATHINFO_EXTENSION);
 
 		$repo = get_repo_path($proj);
 		$out = array();
@@ -248,10 +254,7 @@ function html_blob($proj, $blob)    {
 		$str .= "<div style=\"float:right;padding:7px;\">$plain</div>\n";
 		exec("GIT_DIR=$repo git-cat-file blob $blob", &$out);
 		$str .= "<div class=\"gitcode\">\n";
-		//$str .= highlight(implode("\n", $out));
-		//$str .= highlight_code(implode("\n",$out));
-		$str .= highlight_string(implode("\n",$out),1);
-		//$str .= pretty_code(implode("\n", $out));
+		$str .= geshi_format_code(implode("\n",$out), $ext);
 		$str .= "</div>\n";
 
 		return $str;
@@ -272,7 +275,7 @@ function html_diff($proj, $commit, $parent)    {
 		return $str;
 }
 
-function html_tree($proj, $tree)   {
+function html_tree($proj, $tree, $filepath)   {
 		$str = '';
 
 		$t = git_ls_tree(get_repo_path($proj), $tree);
@@ -283,10 +286,10 @@ function html_tree($proj, $tree)   {
 				$plain = "";
 				$perm = perm_string($obj['perm']);
 				if ($obj['type'] == 'tree')
-						$objlink = "<a href=\"".sanitized_url()."p=$proj&t={$obj['hash']}\">{$obj['file']}</a>\n";
+						$objlink = "<a href=\"".sanitized_url()."p=$proj&t={$obj['hash']}&f=$filepath/{$obj['file']}\">{$obj['file']}</a>\n";
 				else if ($obj['type'] == 'blob')    {
 						$plain = "<a href=\"".sanitized_url()."p=$proj&dl=plain&h={$obj['hash']}\">plain</a>";
-						$objlink = "<a class=\"blob\" href=\"".sanitized_url()."p=$proj&b={$obj['hash']}\">{$obj['file']}</a>\n";
+						$objlink = "<a class=\"blob\" href=\"".sanitized_url()."p=$proj&t=$tree&h={$obj['hash']}&f=$filepath/{$obj['file']}\">{$obj['file']}</a>\n";
 				}
 
 				$str .= "<tr><td>$perm</td><td>$objlink</td><td>$plain</td></tr>\n";
@@ -564,7 +567,7 @@ function sanitized_url()    {
 		}
 
 		/* the GET vars used by git-php */
-		$git_get = array('p', 'dl', 'b', 'a', 'h', 'hb', 't');
+		$git_get = array('p', 'dl', 'a', 'h', 'hb', 't', 'f');
 
 		foreach ($_GET as $var => $val) {
 				if (!in_array($var, $git_get))   {
@@ -724,14 +727,13 @@ function html_breadcrumbs()  {
 		if (isset($_GET['p']))
 				$crumb .= "<a href=\"".sanitized_url()."p={$_GET['p']}\">{$_GET['p']}</a> / ";
 		
-		if (isset($_GET['b']))
-				$crumb .= "blob";
-
-		if (isset($_GET['t']))
-				$crumb .= "tree";
 
 		if ($_GET['a'] == 'commitdiff')
 				$crumb .= 'commitdiff';
+		else if (isset($_GET['h']))
+				$crumb .= "blob";
+		else if (isset($_GET['t']))
+				$crumb .= "tree";
 
 		$str .= $crumb;
 		$str .= "</div>\n";
@@ -904,6 +906,28 @@ EOF;
 		$str .= "</style>\n";
 		}
 
+	return $str;
+}
+
+function geshi_format_code($text, $ext)
+{
+	$str = '';
+	
+	$geshi = new GeSHi($text, '');
+	$lang = $geshi->get_language_name_from_extension($ext);
+	$geshi->set_language($lang);
+	if( $geshi->error() == GESHI_ERROR_NO_SUCH_LANG )
+		return null;
+	$geshi->set_encoding( 'UTF-8' );
+	//$geshi->enable_classes();
+	//$geshi->set_overall_class( "source-$lang" );
+	//$geshi->enable_keyword_links( false );
+  $geshi->enable_line_numbers( GESHI_FANCY_LINE_NUMBERS );
+	$geshi->set_header_type(GESHI_HEADER_DIV);
+
+	$str .= $geshi->parse_code($text,1);
+	if ($geshi->error())
+		$str .= $geshi->error();
 	return $str;
 }
 ?>
