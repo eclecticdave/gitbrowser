@@ -190,7 +190,7 @@ function git_render_page() {
 			$str .= html_summary($_GET['p']);
 			$str .= html_spacer();
 			if ($_GET['a'] == "commitdiff")
-					$str .= html_diff($_GET['p'], $_GET['h'], $_GET['hb']);
+					$str .= html_diff($_GET['p'], $_GET['c'], $_GET['cp']);
 			else
 					$str .= html_browse($_GET['p']);
 	}
@@ -210,10 +210,10 @@ function html_summary($proj)    {
 		$str .= '<div class="gitsummary">';
 		$str .= html_title("Summary");
 		$repo = get_repo_path($proj);
-		if (!isset($_GET['h']))
+		if (!isset($_GET['c']))
 			$str .= html_shortlog($repo, 6);
-		else if (isset($_GET['t'])) {
-			$str .= html_logmsg($repo, $_GET['t']);
+		else {
+			$str .= html_logmsg($repo, $_GET['c']);
 		}
 		$str .= '</div>';
 
@@ -223,20 +223,16 @@ function html_summary($proj)    {
 function html_browse($proj) {
 		$str = '';
  
+		$c = isset($_GET['c']) ? $_GET['c'] : 'HEAD';
 		$f = $_GET['f'];
 
 		$str .= '<div class="gitbrowse">';
-		if (isset($_GET['h'])) {
-				$str .= html_title("Files $f [".$_GET['h']."]");
-				$str .= html_blob($proj, $_GET['h'], $f);
+		$str .= html_title("$proj / $f");
+		if (isset($_GET['b'])) {
+			$str .= html_blob($proj, $_GET['b'], $f);
 		}
 		else {
-				if (isset($_GET['t']))
-						$tree = $_GET['t'];
-				else 
-						$tree = "HEAD";
-				$str .= html_title("Files $f [$tree]");
-				$str .= html_tree($proj, $tree, $f); 
+			$str .= html_tree($proj, $c, $f); 
 		}
 		$str .= '</div>';
 
@@ -250,7 +246,7 @@ function html_blob($proj, $blob, $filename)    {
 
 		$repo = get_repo_path($proj);
 		$out = array();
-		$plain = "<a href=\"".sanitized_url()."p=$proj&dl=plain&h=$blob\">plain</a>";
+		$plain = "<a href=\"".sanitized_url()."p=$proj&dl=plain&b=$blob\">plain</a>";
 		$str .= "<div style=\"float:right;padding:7px;\">$plain</div>\n";
 		exec("GIT_DIR=$repo git-cat-file blob $blob", &$out);
 		$str .= "<div class=\"gitcode\">\n";
@@ -275,21 +271,22 @@ function html_diff($proj, $commit, $parent)    {
 		return $str;
 }
 
-function html_tree($proj, $tree, $filepath)   {
+function html_tree($proj, $cid, $filepath)   {
 		$str = '';
 
-		$t = git_ls_tree(get_repo_path($proj), $tree);
+		$t = git_ls_tree(get_repo_path($proj), $cid, $filepath);
 
 		$str .= "<div class=\"gittree\">\n";
 		$str .= "<table>\n";
-		foreach ($t as $obj)    {
+		foreach ($t as $obj) {
 				$plain = "";
 				$perm = perm_string($obj['perm']);
+				$f = (isset($filepath)) ? "$filepath/{$obj['file']}" : $obj['file'];
 				if ($obj['type'] == 'tree')
-						$objlink = "<a href=\"".sanitized_url()."p=$proj&t={$obj['hash']}&f=$filepath/{$obj['file']}\">{$obj['file']}</a>\n";
+						$objlink = "<a href=\"".sanitized_url()."p=$proj&c=$cid&f=$f\">{$obj['file']}</a>\n";
 				else if ($obj['type'] == 'blob')    {
-						$plain = "<a href=\"".sanitized_url()."p=$proj&dl=plain&h={$obj['hash']}\">plain</a>";
-						$objlink = "<a class=\"blob\" href=\"".sanitized_url()."p=$proj&t=$tree&h={$obj['hash']}&f=$filepath/{$obj['file']}\">{$obj['file']}</a>\n";
+						$plain = "<a href=\"".sanitized_url()."p=$proj&dl=plain&c=$cid&b={$obj['hash']}\">plain</a>";
+						$objlink = "<a class=\"blob\" href=\"".sanitized_url()."p=$proj&c=$cid&b={$obj['hash']}&f=$f\">{$obj['file']}</a>\n";
 				}
 
 				$str .= "<tr><td>$perm</td><td>$objlink</td><td>$plain</td></tr>\n";
@@ -310,8 +307,8 @@ function html_shortlog($repo, $count)   {
 				$cid = $c['commit_id'];
 				$pid = $c['parent'];
 				$mess = short_desc($c['message'], 110);
-				$diff = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=commitdiff&h=$cid&hb=$pid\">commitdiff</a>";
-				$tree = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&t=$cid\">tree</a>";
+				$diff = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=commitdiff&c=$cid&cp=$pid\">commitdiff</a>";
+				$tree = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&c=$cid\">tree</a>";
 				$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$mess</td><td>$diff</td><td>$tree</td></tr>\n"; 
 				$c = git_commit($repo, $c["parent"]);
 		}
@@ -329,9 +326,9 @@ function html_logmsg($repo, $cid)   {
 		#$cid = $c['commit_id'];
 		$pid = $c['parent'];
 		$mess = $c['message'];
-		$diff = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=commitdiff&h=$cid&hb=$pid\">commitdiff</a>";
-		$tree = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&t=$cid\">tree</a>";
-		$parent = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&t=$pid\">parent</a>";
+		$diff = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=commitdiff&c=$cid&cp=$pid\">commitdiff</a>";
+		$tree = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&c=$cid\">tree</a>";
+		$parent = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&c=$pid\">parent</a>";
 		$diff_or_tree = ($_GET['a'] == "commitdiff") ? $tree : $diff;
 		$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$diff_or_tree</td><td>$parent</td></tr>\n"; 
 		$str .= "</table>\n";
@@ -349,8 +346,8 @@ function html_desc($proj)    {
 		$last =  get_last($repo);
 
 		$str .= "<table>\n";
-		$str .= "<tr><td>description</td><td>$desc</td></tr>\n";
-		$str .= "<tr><td>owner</td><td>$owner</td></tr>\n";
+		$str .= "<tr><td>description</td><td>$desc</td><td>Commit:</td><td>{$_GET['c']}</td></tr>\n";
+		$str .= "<tr><td>owner</td><td>$owner</td><td>Blob:</td><td>{$_GET['b']}</td></tr>\n";
 		$str .= "<tr><td>last change</td><td>$last</td></tr>\n";
 		$str .= "</table>\n";
 
@@ -536,12 +533,16 @@ function get_repo_path($proj)   {
 		}
 }
 
-function git_ls_tree($repo, $tree) {
+function git_ls_tree($repo, $cid, $path) {
 		$ary = array();
 				
 		$out = array();
+
+		if (isset($path)) $path .= '/';
+		$pathlen = strlen($path);
+
 		//Have to strip the \t between hash and file
-		exec("GIT_DIR=$repo git-ls-tree $tree | sed -e 's/\t/ /g'", &$out);
+		exec("GIT_DIR=$repo git-ls-tree $cid $path | sed -e 's/\t/ /g'", &$out);
 
 		foreach ($out as $line) {
 				$entry = array();
@@ -549,7 +550,7 @@ function git_ls_tree($repo, $tree) {
 				$entry['perm'] = $arr[0];
 				$entry['type'] = $arr[1];
 				$entry['hash'] = $arr[2];
-				$entry['file'] = $arr[3];
+				$entry['file'] = substr($arr[3],$pathlen);
 				$ary[] = $entry;
 		}
 		return $ary;
@@ -567,7 +568,7 @@ function sanitized_url()    {
 		}
 
 		/* the GET vars used by git-php */
-		$git_get = array('p', 'dl', 'a', 'h', 'hb', 't', 'f');
+		$git_get = array('p', 'dl', 'a', 'b', 'c', 'cp', 'f');
 
 		foreach ($_GET as $var => $val) {
 				if (!in_array($var, $git_get))   {
@@ -580,9 +581,9 @@ function sanitized_url()    {
 
 function write_plain()  {
 		$repo = get_repo_path($_GET['p']);
-		$hash = $_GET['h'];
+		$blob = $_GET['b'];
 		header("Content-Type: text/plain");
-		$str = system("GIT_DIR=$repo git-cat-file blob $hash");
+		$str = system("GIT_DIR=$repo git-cat-file blob $blob");
 		echo $str;
 		die();
 }
@@ -730,10 +731,8 @@ function html_breadcrumbs()  {
 
 		if ($_GET['a'] == 'commitdiff')
 				$crumb .= 'commitdiff';
-		else if (isset($_GET['h']))
+		else if (isset($_GET['b']))
 				$crumb .= "blob";
-		else if (isset($_GET['t']))
-				$crumb .= "tree";
 
 		$str .= $crumb;
 		$str .= "</div>\n";
