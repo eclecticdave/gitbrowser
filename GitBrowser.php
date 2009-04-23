@@ -660,7 +660,7 @@ function write_rss2()   {
 						<content><?php echo $c['message'] ?></content>
 				</item>
 				<?php $c = git_commit($repo, $c['parent']);
-						$link = "http://{$_SERVER['HTTP_HOST']}".sanitized_url()."p=$proj&amp;a=commitdiff&amp;h={$c['commit_id']}&amp;hb={$c['parent']}";
+						$link = "http://{$_SERVER['HTTP_HOST']}".sanitized_url()."p=$proj&amp;a=commitdiff&amp;c={$c['commit_id']}&amp;hb={$c['parent']}";
 							endfor;
 				?>
 		</channel>
