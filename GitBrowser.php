@@ -246,7 +246,7 @@ function html_blob($proj, $blob, $filename)    {
 
 		$repo = get_repo_path($proj);
 		$out = array();
-		$plain = "<a href=\"".sanitized_url()."p=$proj&dl=plain&b=$blob\">plain</a>";
+		$plain = html_ahref(array('p'=>$proj, 'dl'=>'plain', 'b'=>$blob)) . "plain</a>";
 		$str .= "<div style=\"float:right;padding:7px;\">$plain</div>\n";
 		exec("GIT_DIR=$repo git-cat-file blob $blob", &$out);
 		$str .= "<div class=\"gitcode\">\n";
@@ -283,10 +283,10 @@ function html_tree($proj, $cid, $filepath)   {
 				$perm = perm_string($obj['perm']);
 				$f = (isset($filepath)) ? "$filepath/{$obj['file']}" : $obj['file'];
 				if ($obj['type'] == 'tree')
-						$objlink = "<a href=\"".sanitized_url()."p=$proj&c=$cid&f=$f\">{$obj['file']}</a>\n";
+						$objlink = html_ahref(array('p'=>$proj, 'c'=>$cid, 'f'=>$f)) . $obj['file'] . "</a>\n";
 				else if ($obj['type'] == 'blob')    {
-						$plain = "<a href=\"".sanitized_url()."p=$proj&dl=plain&c=$cid&b={$obj['hash']}\">plain</a>";
-						$objlink = "<a class=\"blob\" href=\"".sanitized_url()."p=$proj&c=$cid&b={$obj['hash']}&f=$f\">{$obj['file']}</a>\n";
+						$plain = html_ahref(array('p'=>$proj, 'dl'=>'plain', 'c'=>$cid, 'b'=>$obj['hash'])) . "plain</a>";
+						$objlink = html_ahref(array('p'=>$proj, 'c'=>$cid, 'b'=>$obj['hash'], 'f'=>$f), 'blob') . $obj['file'] . "</a>\n";
 				}
 
 				$str .= "<tr><td>$perm</td><td>$objlink</td><td>$plain</td></tr>\n";
@@ -307,8 +307,8 @@ function html_shortlog($repo, $count)   {
 				$cid = $c['commit_id'];
 				$pid = $c['parent'];
 				$mess = short_desc($c['message'], 110);
-				$diff = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=commitdiff&c=$cid&cp=$pid\">commitdiff</a>";
-				$tree = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&c=$cid\">tree</a>";
+				$diff = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid)) . "commitdiff</a>";
+				$tree = html_ahref(array('p'=>$_GET['p'], 'a'=>'jump_to_tag', 'c'=>$cid)) . "tree</a>";
 				$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$mess</td><td>$diff</td><td>$tree</td></tr>\n"; 
 				$c = git_commit($repo, $c["parent"]);
 		}
@@ -326,9 +326,9 @@ function html_logmsg($repo, $cid)   {
 		#$cid = $c['commit_id'];
 		$pid = $c['parent'];
 		$mess = $c['message'];
-		$diff = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=commitdiff&c=$cid&cp=$pid\">commitdiff</a>";
-		$tree = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&c=$cid\">tree</a>";
-		$parent = "<a href=\"".sanitized_url()."p={$_GET['p']}&a=jump_to_tag&c=$pid\">parent</a>";
+		$diff = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid)) . "commitdiff</a>";
+		$tree = html_ahref(array('p'=>$_GET['p'], 'a'=>'jump_to_tag', 'c'=>$cid)) . "tree</a>";
+		$parent = html_ahref(array('p'=>$_GET['p'], 'a'=>'jump_to_tag', 'c'=>$pid)) . "parent</a>";
 		$diff_or_tree = ($_GET['a'] == "commitdiff") ? $tree : $diff;
 		$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$diff_or_tree</td><td>$parent</td></tr>\n"; 
 		$str .= "</table>\n";
@@ -428,7 +428,7 @@ function html_footer($git_logo)  {
 		$str .= "<div class=\"gitfooter\">\n";
 
 		if (isset($_GET['p']))  {
-				$str .= "<a class=\"rss_logo\" href=\"".sanitized_url()."p={$_GET['p']}&dl=rss2\" >RSS</a>\n";
+				$str .= html_ahref(array('p'=>$_GET['p'], 'dl'=>'rss2'), 'rss_logo') . "RSS</a>\n";
 		}
 
 		if ($git_logo)    {
@@ -485,11 +485,11 @@ function get_last($repo)    {
 function get_project_link($repo, $type = false)    {
 		$path = basename($repo);
 		if (!$type)
-				return "<a href=\"".sanitized_url()."p=$path\">$path</a>";
+				return html_ahref(array('p'=>$path)) . "$path</a>";
 		else if ($type == "targz")
-				return "<a href=\"".sanitized_url()."p=$path&dl=targz\">.tar.gz</a>";
+				return html_ahref(array('p'=>$path, 'dl'=>'targz')) . ".tar.gz</a>";
 		else if ($type == "zip")
-				return "<a href=\"".sanitized_url()."p=$path&dl=zip\">.zip</a>";
+				return html_ahref(array('p'=>$path, 'dl'=>'zip')). ".zip</a>";
 }
 
 function git_commit($repo, $cid)  {
@@ -726,7 +726,7 @@ function html_breadcrumbs()  {
 		$crumb = "<a href=\"".sanitized_url()."\">projects</a> / ";
 
 		if (isset($_GET['p']))
-				$crumb .= "<a href=\"".sanitized_url()."p={$_GET['p']}\">{$_GET['p']}</a> / ";
+				$crumb .= html_ahref(array('p'=>$_GET['p'])) . $_GET['p'] . "</a> / ";
 		
 
 		if ($_GET['a'] == 'commitdiff')
@@ -929,4 +929,21 @@ function geshi_format_code($text, $ext)
 		$str .= $geshi->error();
 	return $str;
 }
+
+function html_ahref( $arguments, $class="" )
+{
+    $ahref = "<a ";
+    if( $class != "" ) $ahref .= "class=\"$class\" ";
+    $ahref .= "href=\"";
+		$ahref .= sanitized_url();
+
+    foreach( $arguments as $key => $val ){
+        if( $val != "" ) $ahref .= "$key=$val&";
+    }
+
+		$ahref = substr($ahref,0,-1);
+    $ahref .= "\">";
+    return $ahref;
+}
+
 ?>
