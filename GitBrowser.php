@@ -319,17 +319,28 @@ function html_shortlog($repo, $count)   {
 function html_logmsg($repo, $cid)   {
 	$str = '';
 
-	$str .= "<table>\n";
 	$c = git_commit($repo, $cid);
-	$date = date("D n/j/y G:i", (int)$c['date']);
-	#$cid = $c['commit_id'];
 	$pid = $c['parent'];
-	$mess = $c['message'];
-	$diff = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), 'commitdiff');
-	$tree = html_ahref(array('p'=>$_GET['p'], 'a'=>'jump_to_tag', 'c'=>$cid), 'tree');
-	$parent = html_ahref(array('p'=>$_GET['p'], 'a'=>'jump_to_tag', 'c'=>$pid), 'parent');
+	$blob = $_GET['b'];
+
+	$diff = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), $cid);
+	$tree = html_ahref(array('p'=>$_GET['p'], 'a'=>'jump_to_tag', 'c'=>$cid), $cid);
+	$parent = html_ahref(array('p'=>$_GET['p'], 'a'=>'jump_to_tag', 'c'=>$pid), $pid);
 	$diff_or_tree = ($_GET['a'] == "commitdiff") ? $tree : $diff;
-	$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$diff_or_tree</td><td>$parent</td></tr>\n"; 
+
+	$str .= "<div class=\"gitsha1\">\n";
+	$str .= "<table>\n";
+	$str .= "<tr><td>Commit</td><td>$diff_or_tree</td></tr>\n";
+	if (isset($pid))
+		$str .= "<tr><td>Parent</td><td>$parent</td></tr>\n";
+	if (isset($blob))
+		$str .= "<tr><td>Blob</td><td>$blob</td></tr>\n";
+	$str .= "</table></div>\n";
+
+	$str .= "<table>\n";
+	$date = date("D n/j/y G:i", (int)$c['date']);
+	$mess = $c['message'];
+	$str .= "<tr><td>$date</td><td>{$c['author']}</td></tr>\n"; 
 	$str .= "</table>\n";
 	$str .= "<pre>$mess</pre>\n";
 
@@ -345,8 +356,8 @@ function html_desc($proj)    {
 	$last =  get_last($repo);
 
 	$str .= "<table>\n";
-	$str .= "<tr><td>description</td><td>$desc</td><td>Commit:</td><td>{$_GET['c']}</td></tr>\n";
-	$str .= "<tr><td>owner</td><td>$owner</td><td>Blob:</td><td>{$_GET['b']}</td></tr>\n";
+	$str .= "<tr><td>description</td><td>$desc</td></tr>\n";
+	$str .= "<tr><td>owner</td><td>$owner</td></tr>\n";
 	$str .= "<tr><td>last change</td><td>$last</td></tr>\n";
 	$str .= "</table>\n";
 
@@ -753,37 +764,6 @@ function html_breadcrumbs()  {
 	return $str;
 }
 
-function zpr ($arr) {
-	print "<pre>" .print_r($arr, true). "</pre>";
-}
-
-function pretty_code($code) {
-	$str = '';
-
-	$str .= "<code class=\"prettyprint\">\n";
-	$str .= $code;
-	$str .= "</code>\n";
-
-	return $str;
-}
-
-function highlight($code) {
-
-	if (substr($code, 0,2) != '<?')    {
-		$code = "<?\n$code\n?>";
-		$add_tags = true;
-	}
-	$code = highlight_string($code,1);
-
-	if ($add_tags)  {
-		//$code = substr($code, 0, 26).substr($code, 36, (strlen($code) - 74));
-		$code = substr($code, 83, strlen($code) - 140);    
-		$code.="</span>";
-	}
-
-	return $code;
-}
-
 function html_style($git_css) {
 	$str = '';
 
@@ -818,8 +798,6 @@ function html_style($git_css) {
 			padding: 5px 0px 0px 7px;
 		}
 
-		//tr:hover { background-color:#edece6; }
-
 		div.gittree a.blob, a.shortlog {
 			text-decoration: none;
 			color: #000000;
@@ -828,6 +806,23 @@ function html_style($git_css) {
 		div.gitsummary, div.gitbrowse, div.gitdesc {
 			padding: 10px;
 			border: 1px solid grey;
+		}
+
+		div.gitsummary pre {
+			border: 0px;
+			background-color: white;
+			font-size: 110%;
+		}
+
+		div.gitsummary div.gitsha1 {
+			float:right;
+			border-left: 1px solid grey;
+			font-size: 80%;
+		}
+
+		div.gitsha1 table {
+			padding: 0px;
+			margin: 0px;
 		}
 
 		div.gitcode {
