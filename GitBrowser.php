@@ -306,9 +306,8 @@ function html_shortlog($repo, $count)   {
 		$date = date("D n/j/y G:i", (int)$c['date']);
 		$cid = $c['commit_id'];
 		$pid = $c['parent'];
-		$mess = html_ahref(array('p'=>$_GET['p'], 'a'=>'jump_to_tag', 'c'=>$cid), short_desc($c['message'], 110), 'shortlog');
-		$diff = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), 'diff');
-		$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$mess</td><td>$diff</td></tr>\n"; 
+		$mess = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), short_desc($c['message'], 110), 'shortlog');
+		$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$mess</td></tr>\n"; 
 		$c = git_commit($repo, $c["parent"]);
 	}
 	$str .= "</table>\n";
