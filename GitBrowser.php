@@ -187,7 +187,10 @@ function git_render_page() {
 		$str .= html_spacer();
 		$str .= html_desc($_GET['p']);
 		$str .= html_spacer();
-		$str .= html_summary($_GET['p']);
+		if ($_GET['a'] == "listheads")
+			$str .= html_listheads($_GET['p']);
+		else
+			$str .= html_summary($_GET['p']);
 		$str .= html_spacer();
 		if ($_GET['a'] == "commitdiff")
 			$str .= html_diff($_GET['p'], $_GET['c'], $_GET['cp']);
@@ -208,10 +211,10 @@ function html_summary($proj)    {
 	$str = '';
 
 	$str .= '<div class="gitsummary">';
-	$str .= html_title("Summary");
+	$str .= html_title("Summary" . html_ahref(array('p'=>$proj, 'a'=>'listheads'), '[Heads]'));
 	$repo = get_repo_path($proj);
 	if (!isset($_GET['c']))
-		$str .= html_shortlog($repo, 6);
+		$str .= html_shortlog($repo, 20);
 	else {
 		$str .= html_logmsg($repo, $_GET['c']);
 	}
@@ -305,10 +308,10 @@ function html_shortlog($repo, $count)   {
 	for ($i = 0; $i < $count && $c; $i++)  {
 		$date = date("D n/j/y G:i", (int)$c['date']);
 		$cid = $c['commit_id'];
-		$pid = $c['parent'];
+		$pid = $c['parent'][0];
 		$mess = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), short_desc($c['message'], 110), 'shortlog');
 		$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$mess</td></tr>\n"; 
-		$c = git_commit($repo, $c["parent"]);
+		$c = git_commit($repo, $pid);
 	}
 	$str .= "</table>\n";
 
@@ -319,7 +322,7 @@ function html_logmsg($repo, $cid)   {
 	$str = '';
 
 	$c = git_commit($repo, $cid);
-	$pid = $c['parent'];
+	$pid = $c['parent'][0];
 	$blob = $_GET['b'];
 
 	$diff = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), $cid);
@@ -342,6 +345,26 @@ function html_logmsg($repo, $cid)   {
 	$str .= "<tr><td>$date</td><td>{$c['author']}</td></tr>\n"; 
 	$str .= "</table>\n";
 	$str .= "<pre>$mess</pre>\n";
+
+	return $str;
+}
+
+function html_listheads($proj) {
+	$str = '';
+
+	$repo = get_repo_path($proj);
+	$heads = git_parse($repo, 'branches');
+
+	$str .= "<table>\n";
+	foreach ($heads as $n => $h)  {
+		$c = git_commit($repo, $h);
+		$date = date("D n/j/y G:i", (int)$c['date']);
+		$cid = $c['commit_id'];
+		$pid = $c['parent'][0];
+		$mess = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), short_desc($c['message'], 110), 'shortlog');
+		$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$mess</td><td>$n</td></tr>\n"; 
+	}
+	$str .= "</table>\n";
 
 	return $str;
 }
@@ -508,25 +531,29 @@ function git_commit($repo, $cid)  {
 
 	exec("GIT_DIR=$repo git-rev-list  --header --max-count=1 $cid", &$out);
 
-	$commit["commit_id"] = $out[0];
-	$g = explode(" ", $out[1]);
-	$commit["tree"] = $g[1];
+	$commit['commit_id'] = $out[0];
+	$commit['parent'] = array();
 
-	$g = explode(" ", $out[2]);
-	$commit["parent"] = $g[1];
-
-	$g = explode(" ", $out[3]);
-	/* variable number of strings for the name */
-	for ($i = 1; $g[$i][0] != '<' && $i < 5; $i++)   {
-		$commit["author"] .= "{$g[$i]} ";
-	}
-
-	/* add the email */
-	$commit["date"] = "{$g[++$i]} {$g[++$i]}";
-	$commit["message"] = "";
 	$size = count($out);
-	for ($i = 5; $i < $size-1; $i++)
-		$commit["message"] .= $out[$i] . "\n";
+	$inmsg = 0;
+	for ($i = 1; $i < $size-1; $i++) {
+		if ($out[$i] == '') $inmsg = 1;
+		if ($inmsg == 0) {
+			$g = explode(" ", $out[$i]);
+			if ($g[0] == 'parent')
+				$commit['parent'][] = $g[1];
+			else if ($g[0] == 'author') {
+				for ($j = 1; $g[$j][0] != '<' && $j < 5; $j++)   {
+					$commit["author"] .= "{$g[$j]} ";
+				}
+				$commit["date"] = "{$g[++$j]} {$g[++$j]}";
+			}
+			else 
+				$commit[$g[0]] = $g[1];
+		}
+		else
+			$commit["message"] .= $out[$i] . "\n";
+	}		
 	return $commit;
 }
 
@@ -904,6 +931,23 @@ function html_ahref( $arguments, $text="", $class="" )
 	$ahref .= "\">";
 	if ($text != "") $ahref .= $text . "</a>\n";
 	return $ahref;
+}
+
+function git_parse($repo, $what ){
+	$cmd1="GIT_DIR=$repo git-rev-parse --symbolic --$what";
+	$out1 = array();
+	$bran=array();
+	exec( $cmd1, &$out1 );
+  for( $i=0; $i < count( $out1 ); $i++ ){
+		if ($out1 == '') continue;
+	  $cmd2="GIT_DIR=$repo git-rev-list ";
+    $cmd2 .= "--max-count=1 ".escapeshellarg($out1[$i]);
+		$out2 = array();
+		exec( $cmd2, &$out2 );
+		if ($out2[0] != '')
+			$bran[$out1[$i]] = $out2[0];
+	}
+	return  $bran;
 }
 
 ?>
