@@ -187,10 +187,7 @@ function git_render_page() {
 		$str .= html_spacer();
 		$str .= html_desc($_GET['p']);
 		$str .= html_spacer();
-		if ($_GET['a'] == "listheads")
-			$str .= html_listheads($_GET['p']);
-		else
-			$str .= html_summary($_GET['p']);
+		$str .= html_summary($_GET['p']);
 		$str .= html_spacer();
 		if ($_GET['a'] == "commitdiff")
 			$str .= html_diff($_GET['p'], $_GET['c'], $_GET['cp']);
@@ -211,22 +208,62 @@ function html_summary($proj)    {
 	$str = '';
 
 	$str .= '<div class="gitsummary">';
-	$str .= html_title("Summary" . html_ahref(array('p'=>$proj, 'a'=>'listheads'), '[Heads]'));
-	$repo = get_repo_path($proj);
-	if (!isset($_GET['c']))
-		$str .= html_shortlog($repo, 20);
-	else {
-		$str .= html_logmsg($repo, $_GET['c']);
-	}
-	$str .= '</div>';
 
+	if (isset($_GET['a']) && ($_GET['a'] == 'listheads')){
+		$str .= html_title("Heads" . html_ahref(array('p'=>$proj), '[Summary]'));
+		$str .= html_listheads($proj);
+	}
+	else {
+		$repo = get_repo_path($proj);
+		$branches = git_parse($repo, 'branches');
+		$bmenu = "<ul id=\"ddmenu\">\n<li>Branches\n<ul>\n";
+		foreach ($branches as $b => $h) {
+			$a = html_ahref(array('p'=>$proj, 'h'=>$b), $b);
+			$bmenu .= "<li>$a</li>\n";
+		}
+		$bmenu .= "</ul></li>";
+
+		$bmenu .= <<< EOF
+				<li>Menu2
+					<ul>
+						<li><a href="#">HTML Drop Down</a></li>
+						<li><a href="#">DHTML Menu</a></li>
+						<li><a href="#">JavaScript DropDown</a></li>
+						<li><a href="#">Cascading Menu</a></li>
+						<li><a href="#">CSS Horizontal Menu</a></li>
+					</ul>
+				</li>
+				<li>Menu3
+					<ul>
+						<li><a href="#">ASP Dropdown</a></li>
+						<li><a href="#">Pulldown menu</a></li>
+						<li><a href="#">AJAX Drop Submenu</a></li>
+						<li><a href="#">DIV Cascading Menu</a></li>
+					</ul>
+				</li>
+			</ul>
+EOF;
+
+		#$str .= html_title("Summary" . html_ahref(array('p'=>$proj, 'a'=>'listheads'), '[Heads]') . $bmenu);
+		$str .= html_title($bmenu);
+		$head = $_GET['h'];
+		if (!isset($head)) $head = 'master';
+
+		if (!isset($_GET['c']))
+			$str .= html_shortlog($proj, $head, 400, $_GET['sk']);
+		else {
+			$str .= html_logmsg($proj, $_GET['c']);
+		}
+	}
+
+	$str .= '</div>';
 	return $str;
 }
 
 function html_browse($proj) {
 	$str = '';
  
-	$c = isset($_GET['c']) ? $_GET['c'] : 'HEAD';
+	$c = isset($_GET['c']) ? $_GET['c'] : isset($_GET['h']) ? $_GET['h'] : 'HEAD';
 	$f = $_GET['f'];
 
 	$str .= '<div class="gitbrowse">';
@@ -300,34 +337,44 @@ function html_tree($proj, $cid, $filepath)   {
 	return $str;
 }
 
-function html_shortlog($repo, $count)   {
+function html_shortlog($proj, $head, $count, $skip=0) {
 	$str = '';
 
 	$str .= "<table>\n";
-	$c = git_commit($repo, "HEAD");
+	$repo = get_repo_path($proj);
+	$c = git_commit($repo, $head, $skip);
 	for ($i = 0; $i < $count && $c; $i++)  {
 		$date = date("D n/j/y G:i", (int)$c['date']);
 		$cid = $c['commit_id'];
 		$pid = $c['parent'][0];
-		$mess = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), short_desc($c['message'], 110), 'shortlog');
-		$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$mess</td></tr>\n"; 
+		$mess = html_ahref(array('p'=>$proj, 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), short_desc($c['message'], 110), 'shortlog');
+		$branches = $c['branches'];
+		$str .= "<tr><td>$date</td><td>{$c['author']}</td><td>$branches</td><td>$mess</td></tr>\n"; 
 		$c = git_commit($repo, $pid);
 	}
+	$str .= "</table>\n";
+
+	//TODO: Next should not be a link if there are no more revisions
+	$next = html_ahref(array('p'=>$proj, 'sk'=>$skip+20), 'Next');
+	$prev = ($skip >= 20) ? html_ahref(array('p'=>$proj, 'sk'=>$skip-20), 'Prev') : 'Prev';
+	$str .= "<table>\n";
+	$str .= "<tr><td>$prev</td><td>$next</td><tr>\n";
 	$str .= "</table>\n";
 
 	return $str;
 }
 
-function html_logmsg($repo, $cid)   {
+function html_logmsg($proj, $cid)   {
 	$str = '';
 
+	$repo = get_repo_path($proj);
 	$c = git_commit($repo, $cid);
 	$pid = $c['parent'][0];
 	$blob = $_GET['b'];
 
-	$diff = html_ahref(array('p'=>$_GET['p'], 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), $cid);
-	$tree = html_ahref(array('p'=>$_GET['p'], 'a'=>'jump_to_tag', 'c'=>$cid), $cid);
-	$parent = html_ahref(array('p'=>$_GET['p'], 'a'=>'jump_to_tag', 'c'=>$pid), $pid);
+	$diff = html_ahref(array('p'=>$proj, 'a'=>'commitdiff', 'c'=>$cid, 'cp'=>$pid), $cid);
+	$tree = html_ahref(array('p'=>$proj, 'a'=>'jump_to_tag', 'c'=>$cid), $cid);
+	$parent = html_ahref(array('p'=>$proj, 'a'=>'jump_to_tag', 'c'=>$pid), $pid);
 	$diff_or_tree = ($_GET['a'] == "commitdiff") ? $tree : $diff;
 
 	$str .= "<div class=\"gitsha1\">\n";
@@ -478,11 +525,6 @@ function html_footer($git_logo)  {
 	return $str;
 }
 
-
-function git_tree_head($gitdir) {
-	return git_tree($gitdir, "HEAD");
-}
-
 function git_tree($gitdir, $tree) {
 	$out = array();
 	$command = "GIT_DIR=$gitdir git-ls-tree --name-only $tree";
@@ -508,7 +550,7 @@ function get_file_owner($path)  {
 
 function get_last($repo)    {
 	$out = array();
-	$date = exec("GIT_DIR=$repo git-rev-list  --header --max-count=1 HEAD | grep -a committer | cut -f5-6 -d' '", &$out);
+	$date = exec("GIT_DIR=$repo git-rev-list --header --max-count=1 HEAD | grep -a committer | cut -f5-6 -d' '", &$out);
 	return date("D n/j/y G:i", (int)$date);
 }
 
@@ -522,15 +564,16 @@ function get_project_link($repo, $type = false)    {
 		return html_ahref(array('p'=>$path, 'dl'=>'zip'), '.zip');
 }
 
-function git_commit($repo, $cid)  {
+function git_commit($repo, $cid, $skip=0)  {
 	$out = array();
 	$commit = array();
 
 	if (strlen($cid) <= 0)
 		return 0;
 
-	exec("GIT_DIR=$repo git-rev-list  --header --max-count=1 $cid", &$out);
+	$skip_p = ($skip > 0) ? "--skip=$skip" : '';
 
+	exec("GIT_DIR=$repo git-rev-list  --header --max-count=1 $skip_p $cid", &$out);
 	$commit['commit_id'] = $out[0];
 	$commit['parent'] = array();
 
@@ -554,6 +597,16 @@ function git_commit($repo, $cid)  {
 		else
 			$commit["message"] .= $out[$i] . "\n";
 	}		
+
+	$out = array();
+	exec("GIT_DIR=$repo git-branch --contains " . $commit['commit_id'], &$out);
+
+	$size = count($out);
+	for($i = 0; $i < $size; $i++) {
+		$out[$i] = substr($out[$i], 2);
+	}
+	$commit['branches'] = implode(', ', $out);
+
 	return $commit;
 }
 
@@ -602,7 +655,7 @@ function sanitized_url()    {
 	}
 
 	/* the GET vars used by git-php */
-	$git_get = array('p', 'dl', 'a', 'b', 'c', 'cp', 'f');
+	$git_get = array('p', 'dl', 'a', 'b', 'c', 'cp', 'f', 'sk', 'h');
 
 	foreach ($_GET as $var => $val) {
 		if (!in_array($var, $git_get))   {
@@ -824,6 +877,9 @@ function html_style($git_css) {
 			padding: 5px 0px 0px 7px;
 		}
 
+		div.gitsummary tr:hover { background-color:#edece6; }
+		div.gitbrowse tr:hover { background-color:#edece6; }
+
 		div.gittree a.blob, a.shortlog {
 			text-decoration: none;
 			color: #000000;
@@ -886,6 +942,30 @@ function html_style($git_css) {
 				text-align:center; text-decoration:none;
 			}
 		a.rss_logo:hover { background-color:#ee5500; }
+
+		#ddmenu ul {
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		#ddmenu li {
+			display: inline;
+			position: relative;
+			width: 20em;
+		}
+
+		#ddmenu li ul {
+			display: none;
+			position: absolute;
+			top: 1em;
+			left: 0;
+			background-color: #d9d8d1;
+		}
+
+		#ddmenu li:hover ul {
+			display: block;
+		}
 EOF;
 
 	$str .= "</style>\n";
